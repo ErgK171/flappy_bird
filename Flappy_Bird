@@ -1,0 +1,140 @@
+import pygame
+import sys
+import random
+
+# Инициализация Pygame
+pygame.init()
+
+# Настройки окна
+WIDTH, HEIGHT = 400, 600
+FPS = 60
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Flappy Bird")
+clock = pygame.time.Clock()
+
+# Цвета
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+BLUE = (0, 150, 255)
+GREEN = (0, 200, 0)
+SKY_BLUE = (135, 206, 235)
+
+# Создание графики программно
+def create_bird():
+    surface = pygame.Surface((34, 24), pygame.SRCALPHA)
+    pygame.draw.ellipse(surface, BLUE, (0, 0, 34, 24))  # Тело
+    pygame.draw.polygon(surface, (255, 165, 0), [(34, 12), (44, 8), (44, 16)])  # Клюв
+    pygame.draw.circle(surface, WHITE, (25, 8), 5)  # Глаз
+    pygame.draw.circle(surface, BLACK, (25, 8), 2)
+    return surface
+
+def create_pipe(height, flipped=False):
+    pipe = pygame.Surface((52, height), pygame.SRCALPHA)
+    pygame.draw.rect(pipe, GREEN, (0, 0, 52, height), 0, 10)  # Основная часть
+    pygame.draw.rect(pipe, (0, 150, 0), (0, 0, 52, height), 3, 10)  # Обводка
+    return pygame.transform.flip(pipe, False, flipped)
+
+class Bird(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = create_bird()
+        self.rect = self.image.get_rect(center=(50, HEIGHT//2))
+        self.gravity = 0.25
+        self.velocity = 0
+
+    def update(self):
+        self.velocity += self.gravity
+        self.rect.y += int(self.velocity)
+
+    def flap(self):
+        self.velocity = -6
+
+class Pipe(pygame.sprite.Sprite):
+    def __init__(self, x, y, height, flipped):
+        super().__init__()
+        self.image = create_pipe(height, flipped)
+        self.rect = self.image.get_rect(midtop=(x, y)) if not flipped else self.image.get_rect(midbottom=(x, y))
+        self.speed = 3
+        self.passed = False
+
+    def update(self):
+        self.rect.x -= self.speed
+        if self.rect.right < 0:
+            self.kill()
+
+def create_pipe_pair():
+    gap = 150
+    y = random.randint(200, HEIGHT - 200)
+    top_height = y - gap//2
+    bottom_height = HEIGHT - y - gap//2
+    return (
+        Pipe(WIDTH, 0, top_height, False),
+        Pipe(WIDTH, HEIGHT, bottom_height, True)
+    )
+
+def init_game():
+    global bird, pipes, all_sprites, score, game_active
+    bird = Bird()
+    pipes = pygame.sprite.Group()
+    all_sprites = pygame.sprite.Group(bird)
+    score = 0
+    game_active = True
+
+# Инициализация игры
+init_game()
+spawn_pipe_event = pygame.USEREVENT + 1
+pygame.time.set_timer(spawn_pipe_event, 1500)
+
+# Основной игровой цикл
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE and game_active:
+                bird.flap()
+            if event.key == pygame.K_r and not game_active:
+                init_game()
+        if event.type == spawn_pipe_event and game_active:
+            top_pipe, bottom_pipe = create_pipe_pair()
+            pipes.add(top_pipe, bottom_pipe)
+            all_sprites.add(top_pipe, bottom_pipe)
+
+    if game_active:
+        all_sprites.update()
+        
+        # Проверка столкновений
+        if (pygame.sprite.spritecollideany(bird, pipes) 
+            or bird.rect.top <= 0 
+            or bird.rect.bottom >= HEIGHT):
+            game_active = False
+
+        # Подсчет очков
+        for pipe in pipes:
+            if pipe.rect.right < bird.rect.left and not hasattr(pipe, 'passed'):
+                pipe.passed = True
+                score += 0.5
+
+    # Отрисовка
+    screen.fill(SKY_BLUE)
+    all_sprites.draw(screen)
+    
+    # Интерфейс
+    font = pygame.font.Font(None, 36)
+    score_text = font.render(f"Score: {int(score)}", True, BLACK)
+    screen.blit(score_text, (10, 10))
+    
+    if not game_active:
+        font_big = pygame.font.Font(None, 74)
+        game_over_text = font_big.render("Game Over!", True, (255, 0, 0))
+        screen.blit(game_over_text, (WIDTH//2 - 140, HEIGHT//2 - 50))
+        font_small = pygame.font.Font(None, 36)
+        restart_text = font_small.render("Press R to restart", True, BLACK)
+        screen.blit(restart_text, (WIDTH//2 - 110, HEIGHT//2 + 20))
+
+    pygame.display.flip()
+    clock.tick(FPS)
+
+pygame.quit()
+sys.exit()
